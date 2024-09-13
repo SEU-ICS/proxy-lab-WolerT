@@ -110,8 +110,8 @@ void doit(int fd)
 
     Rio_readinitb(&rio2, clientfd);
     char buf2[MAXLINE*5];
-    snprintf(buf2, sizeof(buf2), "%s %s %s\r\n", method, path, version);
-    snprintf(buf2 + strlen(buf2), sizeof(buf2) - strlen(buf2), "Host: %s\r\n", hostname);
+    snprintf(buf2, sizeof(buf2), "%s %s %s\r\n", method, filename, version);
+    snprintf(buf2 + strlen(buf2), sizeof(buf2) - strlen(buf2), "Host: %s\r\n", host);
     snprintf(buf2 + strlen(buf2), sizeof(buf2) - strlen(buf2), "Connection: close\r\n");
     snprintf(buf2 + strlen(buf2), sizeof(buf2) - strlen(buf2), "User-Agent: Mozilla/5.0\r\n");
     snprintf(buf2 + strlen(buf2), sizeof(buf2) - strlen(buf2), "\r\n");
