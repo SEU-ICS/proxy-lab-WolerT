@@ -101,27 +101,18 @@ void doit(int fd) {
     }
 
     cache_entry *block = &cache[find(uri)];
+    
     if (block != NULL && block->valid) {
         Rio_writen(fd, block->data, block->len);
         return;
     }
 
     /* Parse URI from GET request */
-    int ok = parse_uri(uri, filename, hostname, port);
-    if (ok < 0) {
-        printf("Cannot parse uri.\n");
-        return;
-    }
-
+    parse_uri(uri, hostname, port, filename);
     char buf2[MAXLINE*5];
     size_t size = sprintf(buf2, "%s %s %s\r\nHost: %s\r\nConnection: close\r\nUser-Agent: %s\r\n\r\n", method, filename, version, hostname, user_agent_hdr);
 
     int serverfd = open_clientfd(hostname, port);
-    if (serverfd < 0) {
-        printf("Cannot connect to server.\n");
-        return;
-    }
-
     Rio_readinitb(&serrio, serverfd);
     Rio_writen(serverfd, buf2, strlen(buf2));
 
@@ -140,42 +131,38 @@ void doit(int fd) {
     cache_insert(uri, content, len);
 }
 
-int parse_uri(char *uri, char *filename, char *host, char *port) {
-    char *uri_copy = strdup(uri);
-    char *dash = strstr(uri_copy, "://");
-    char *host_start = NULL;
-    char *host_end = NULL;
+int parse_uri(char *uri, char *hostname, char *port, char *filename) {
+    char *hostbegin;
+    char *hostend;
+    char *pathbegin;
+    int len;
 
-    if (dash) {
-        host_start = dash + 3;
-    } else {
-        free(uri_copy);
+    if (strncasecmp(uri, "http://", 7) == 0)
+        uri += 7;
+    else
         return -1;
-    }
 
-    host_end = strchr(host_start, '/');
-    if (host_end) {
-        *host_end = '\0';
-        strcpy(host, host_start);
-    } else {
-        strcpy(host, host_start);
-    }
+    hostbegin = uri;
+    hostend = strpbrk(hostbegin, " :/\r\n\0");
+    len = hostend - hostbegin;
+    strncpy(hostname, hostbegin, len);
+    hostname[len] = '\0';
 
-    char *port_start = strchr(host_start, ':');
-    if (port_start && (port_start[1] != '\0')) {
-        *port_start = '\0';
-        strcpy(port, port_start + 1);
+    if (*hostend == ':') {
+        char *portbegin = hostend + 1;
+        char *portend = strpbrk(portbegin, "/\r\n\0");
+        len = portend - portbegin;
+        strncpy(port, portbegin, len);
+        port[len] = '\0';
     } else {
         strcpy(port, "80");
     }
 
-    if (host_end) {
-        strcpy(filename, host_end + 1);
-    } else {
-        strcpy(filename, "/");
-    }
-
-    free(uri_copy);
+    pathbegin = strchr(hostend, '/');
+    if (pathbegin)
+        strcpy(filename, pathbegin);
+    else
+        filename[0] = '\0';
     return 0;
 }
 
