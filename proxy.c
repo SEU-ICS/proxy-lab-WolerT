@@ -132,27 +132,54 @@ void doit(int fd) {
     cache_insert(uri, content, len);
 }
 
-void parse_uri(char* uri, char* host, char* port, char* fileName)
-{
-    char* hostp = strstr(uri, WEB_PREFIX) + strlen(WEB_PREFIX);
-    char* dash = strstr(hostp, "/");
-    char* colon = strstr(hostp, ":");
-    if(!colon)
-    {
-        strncpy(host, hostp, dash - hostp);
-        host[dash - hostp] = '\0';
-        strcpy(port,"80");
-    }
-    else
-    {
-        strncpy(host, hostp, colon - hostp);
-        host[colon - host] = '\0';
-        strncpy(port, colon + 1, dash - colon -1);
-        port[dash - colon -1] = '\0';
+void parse_uri(char* uri, char* host, char* port, char* fileName) {
+    // Check if the URI starts with "http://"
+    if (strncmp(uri, WEB_PREFIX, strlen(WEB_PREFIX)) != 0) {
+        fprintf(stderr, "Error: Invalid URI format, must start with 'http://'\n");
+        return;
     }
 
+    // Move past "http://"
+    char* hostp = uri + strlen(WEB_PREFIX);
+
+    // Locate the first '/' after the host (indicating the start of the path)
+    char* dash = strstr(hostp, "/");
+    if (!dash) {
+        fprintf(stderr, "Error: Invalid URI format, missing path\n");
+        return;
+    }
+
+    // Locate the ':' which separates host and port (if present)
+    char* colon = strstr(hostp, ":");
+    
+    // Check for host and port parsing
+    if (colon && colon < dash) {
+        // Hostname is up to the colon
+        int host_len = colon - hostp;
+        strncpy(host, hostp, host_len);
+        host[host_len] = '\0';
+
+        // Port is between the colon and the first '/'
+        int port_len = dash - colon - 1;
+        strncpy(port, colon + 1, port_len);
+        port[port_len] = '\0';
+    } else {
+        // No port specified, default to "80"
+        int host_len = dash - hostp;
+        strncpy(host, hostp, host_len);
+        host[host_len] = '\0';
+        strcpy(port, "80");
+    }
+
+    // Copy the path (filename) from the URI
     strcpy(fileName, dash);
+
+    // Validate if host, port, and filename are properly set
+    if (strlen(host) == 0 || strlen(port) == 0 || strlen(fileName) == 0) {
+        fprintf(stderr, "Error: Failed to parse URI components. Host: %s, Port: %s, Filename: %s\n", host, port, fileName);
+    }
 }
+
 
 int main(int argc, char **argv) {
     int listenfd, connfd;
