@@ -107,7 +107,7 @@ void doit(int fd) {
     }
 
     /* Parse URI from GET request */
-    int ok = parse_uri(uri, hostname, port, filename);
+    int ok = parse_uri(uri, filename, hostname, port);
     if (ok < 0) {
         printf("Cannot parse uri.\n");
         return;
@@ -140,38 +140,42 @@ void doit(int fd) {
     cache_insert(uri, content, len);
 }
 
-int parse_uri(char *uri, char *hostname, char *port, char *filename) {
-    char *hostbegin;
-    char *hostend;
-    char *pathbegin;
-    int len;
+int parse_uri(char *uri, char *filename, char *host, char *port) {
+    char *uri_copy = strdup(uri);
+    char *dash = strstr(uri_copy, "://");
+    char *host_start = NULL;
+    char *host_end = NULL;
 
-    if (strncasecmp(uri, "http://", 7) == 0)
-        uri += 7;
-    else
+    if (dash) {
+        host_start = dash + 3;
+    } else {
+        free(uri_copy);
         return -1;
+    }
 
-    hostbegin = uri;
-    hostend = strpbrk(hostbegin, " :/\r\n\0");
-    len = hostend - hostbegin;
-    strncpy(hostname, hostbegin, len);
-    hostname[len] = '\0';
+    host_end = strchr(host_start, '/');
+    if (host_end) {
+        *host_end = '\0';
+        strcpy(host, host_start);
+    } else {
+        strcpy(host, host_start);
+    }
 
-    if (*hostend == ':') {
-        char *portbegin = hostend + 1;
-        char *portend = strpbrk(portbegin, "/\r\n\0");
-        len = portend - portbegin;
-        strncpy(port, portbegin, len);
-        port[len] = '\0';
+    char *port_start = strchr(host_start, ':');
+    if (port_start && (port_start[1] != '\0')) {
+        *port_start = '\0';
+        strcpy(port, port_start + 1);
     } else {
         strcpy(port, "80");
     }
 
-    pathbegin = strchr(hostend, '/');
-    if (pathbegin)
-        strcpy(filename, pathbegin);
-    else
-        filename[0] = '\0';
+    if (host_end) {
+        strcpy(filename, host_end + 1);
+    } else {
+        strcpy(filename, "/");
+    }
+
+    free(uri_copy);
     return 0;
 }
 
