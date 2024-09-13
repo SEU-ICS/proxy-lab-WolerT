@@ -189,7 +189,7 @@ void doit(int fd)
         }
     }
     Close(serverfd);
-    cache_insert(uri, content, len);
+    insert(uri, content, len);
 }
 
 int main(int argc, char **argv)
