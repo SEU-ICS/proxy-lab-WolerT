@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include "csapp.h"
 #include <string.h>
+#include <pthread.h>
 
 /* Recommended max cache and object sizes */
 #define MAX_CACHE_SIZE 1049000
@@ -35,7 +36,7 @@ int parse_uri(char *uri, char *filename, /*char *cgiargs, */char *host, char*por
     if (host_end) 
     {
         *host_end = '\0';
-        *host = strdup(host_start);
+        host = strdup(host_start);
     }
 
     //read port
@@ -53,7 +54,7 @@ int parse_uri(char *uri, char *filename, /*char *cgiargs, */char *host, char*por
 
     //read filename
     if (host_end) {
-        *filename = strdup(host_end);
+        filename = strdup(host_end);
     }
 
     free(uri_copy);
@@ -110,7 +111,7 @@ void doit(int fd)
                                 //line:netp:doit:readrequesthdrs
 
     /* Parse URI from GET request */
-    parse_success = parse_uri(&uri, &filename, /*cgiargs,*/ &host, &port);       //line:netp:doit:staticcheck
+    parse_success = parse_uri(&uri[0], &filename[0], /*cgiargs,*/ &host[0], &port[0]);       //line:netp:doit:staticcheck
     if (parse_success < 0) 
     {                     //line:netp:doit:beginnotfound
 	    printf("Proxy couldn't find this file");
