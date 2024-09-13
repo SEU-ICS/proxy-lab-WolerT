@@ -10,6 +10,7 @@
 #define MAX_OBJECT_SIZE 102400
 #define MAX_CACHE_ENTRIES 500  // 假设我们有500个缓存条目
 #define MAX_THREADS 100
+#define WEB_PREFIX "http://"
 
 /* You won't lose style points for including this long line in your code */
 static const char *user_agent_hdr = "User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:10.0.3) Gecko/20120305 Firefox/10.0.3\r\n";
@@ -81,6 +82,17 @@ void *thread(void *varg) {
     return NULL;
 }
 
+void parseuri(char* uri, char* host, char* port, char* fileName)
+{
+    sscanf(buf, "%s %s %s", method, uri, version);
+    char* hostp = strstr(uri, WEB_PREFIX) + strlen(WEB_PREFIX);
+    char* dash = strstr(hostp, "/");
+    char* colon = strstr(hostp, ":");
+    strncpy(host, hostp, dash - hostp);
+    strncpy(port, colon + 1, dash - colon - 1);
+    strcpy(fileName, dash);
+}
+
 void doit(int fd) {
     struct stat sbuf;
     char buf[MAXLINE], method[MAXLINE], uri[MAXLINE], version[MAXLINE];
@@ -131,38 +143,6 @@ void doit(int fd) {
     cache_insert(uri, content, len);
 }
 
-int parse_uri(char *uri, char *hostname, char *port, char *filename) {
-    char *hostbegin;
-    char *hostend;
-    char *pathbegin;
-    int len;
-
-    if (strncasecmp(uri, "http://", 7) == 0)
-        uri += 7;
-    else
-        return -1;
-    hostbegin = uri;
-    hostend = strpbrk(hostbegin, " :/\r\n\0");
-    len = hostend - hostbegin;
-    strncpy(hostname, hostbegin, len);
-    hostname[len] = '\0';
-    if (*hostend == ':') {
-        char *portbegin = hostend + 1;
-        char *portend = strpbrk(portbegin, "/\r\n\0");
-        len = portend - portbegin;
-        strncpy(port, portbegin, len);
-        port[len] = '\0';
-    } else {
-        strcpy(port, "80");
-    }
-    pathbegin = strchr(hostend, '/');
-    if (pathbegin)
-        strcpy(filename, pathbegin);
-    else
-        filename[0] = '\0';
-    return 0;
-}
-
 int main(int argc, char **argv) {
     int listenfd, connfd;
     char hostname[MAXLINE], port[MAXLINE];
@@ -187,3 +167,7 @@ int main(int argc, char **argv) {
     }
     return 0;
 }
+
+
+
+
