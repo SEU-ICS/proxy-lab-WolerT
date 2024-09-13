@@ -116,7 +116,7 @@ void doit(int fd)
     snprintf(buf2 + strlen(buf2), sizeof(buf2) - strlen(buf2), "User-Agent: Mozilla/5.0\r\n");
     snprintf(buf2 + strlen(buf2), sizeof(buf2) - strlen(buf2), "\r\n");
 
-    Rio_writen(clientfd, buf2, size);
+    Rio_writen(clientfd, buf2, strlen(buf2));
 
     size_t n;
     size_t len=0;
