@@ -1,3 +1,6 @@
+//Name: Tang Xiangjie
+//Number:09J22120
+
 #include <stdio.h>
 #include "csapp.h"
 #include <string.h>
@@ -51,49 +54,54 @@ int parse_uri(char *uri, char *filename, char *host, char *port) {
     return 1;
 }
 
+
 void doit(int fd) 
 {
     int parse_success;
     char buf[MAXLINE], method[MAXLINE], uri[MAXLINE], version[MAXLINE];
     char host[MAXLINE], port[MAXLINE];
-    char filename[MAXLINE];
+    char filename[MAXLINE]/*cgiargs[MAXLINE]*/;
     char cache[MAXLINE];
-    rio_t rio, rio2;
+    rio_t rio,rio2;
 
     /* Read request line and headers */
     Rio_readinitb(&rio, fd);
     
-    // if fd is empty
+    //if fd empty
     if (!Rio_readlineb(&rio, buf, MAXLINE))  
         return;
     
     printf("%s", buf);
 
-    // Read method, URI, and version
-    sscanf(buf, "%s %s %s", method, uri, version);
+    //read method uri version
+    sscanf(buf, "%s %s %s", method, uri, version);       //line:netp:doit:parserequest
     
-    // Transform HTTP version
+    //transform http version
     char *pos = strstr(buf, "HTTP/1.1");
     if (pos != NULL) 
         strcpy(pos, "HTTP/1.0");
 
-    // Check if method is GET
+    //if get?
     if (strcasecmp(method, "GET")) 
-    {
+    {                     //line:netp:doit:beginrequesterr
         printf("Proxy does not implement this method\r\n");
         return;
-    }
+    }                                                    //line:netp:doit:endrequesterr
     
-    /* Parse URI from GET request */
-    parse_success = parse_uri(&uri[0], &filename[0], &host[0], &port[0]);
-    if (parse_success < 0) 
-    {
-        printf("Proxy couldn't find this file");
-        return;
-    }
+                                //line:netp:doit:readrequesthdrs
 
-    // Open client connection
-    int clientfd = open_clientfd(host, port); 
+    /* Parse URI from GET request */
+    parse_success = parse_uri(&uri[0], &filename[0], /*cgiargs,*/ &host[0], &port[0]);       //line:netp:doit:staticcheck
+    if (parse_success < 0) 
+    {                     //line:netp:doit:beginnotfound
+	    printf("Proxy couldn't find this file");
+	    return;
+    }                                                    //line:netp:doit:endnotfound
+
+    
+    
+    //open client
+    int clientfd=open_clientfd(host, port); 
     if (clientfd < 0)
     {
         printf("Cannot connect to server.\n");
@@ -101,22 +109,23 @@ void doit(int fd)
     }
 
     Rio_readinitb(&rio2, clientfd);
-    char buf2[MAXLINE * 5];
-    
-    // Use sprintf to construct the HTTP request headers in one go
-    sprintf(buf2, "%s %s %s\r\nHost: %s\r\nConnection: close\r\nUser-Agent: Mozilla/5.0\r\n\r\n", 
-            method, filename, version, host);
-    
-    Rio_writen(clientfd, buf2, strlen(buf2));
+    char buf2[MAXLINE*5];
+    snprintf(buf2, sizeof(buf2), "%s %s %s\r\n", method, path, version);
+    snprintf(buf2 + strlen(buf2), sizeof(buf2) - strlen(buf2), "Host: %s\r\n", hostname);
+    snprintf(buf2 + strlen(buf2), sizeof(buf2) - strlen(buf2), "Connection: close\r\n");
+    snprintf(buf2 + strlen(buf2), sizeof(buf2) - strlen(buf2), "User-Agent: Mozilla/5.0\r\n");
+    snprintf(buf2 + strlen(buf2), sizeof(buf2) - strlen(buf2), "\r\n");
+
+    Rio_writen(clientfd, buf2, size);
 
     size_t n;
-    size_t len = 0;
+    size_t len=0;
     char content[MAX_OBJECT_SIZE];
     while ((n = Rio_readlineb(&rio2, buf, MAXLINE)) != 0)
     {
-        printf("proxy received %d bytes, then send\n", (int)n);
+        printf("proxy received %d bytes,then send\n", (int)n);
         Rio_writen(fd, buf, n);
-        if (len + n < MAX_OBJECT_SIZE)
+        if(len + n < MAX_OBJECT_SIZE)
         {
             memcpy(content + len, buf, n);
             len += n;
@@ -134,23 +143,24 @@ int main(int argc, char **argv)
 
     /* Check command line args */
     if (argc != 2) {
-        fprintf(stderr, "usage: %s <port>\n", argv[0]);
-        exit(1);
+	fprintf(stderr, "usage: %s <port>\n", argv[0]);
+	exit(1);
     }
 
     listenfd = Open_listenfd(argv[1]);
     
     while (1) {
-        clientlen = sizeof(clientaddr);
-        connfd = Accept(listenfd, (SA *)&clientaddr, &clientlen); // line:netp:tiny:accept
-        Getnameinfo((SA *) &clientaddr, clientlen, hostname, MAXLINE, port, MAXLINE, 0);
-        printf("Accepted connection from (%s, %s)\n", hostname, port);
-    
-        doit(connfd); // line:netp:tiny:doit
-    
-        Close(connfd); // line:netp:tiny:close
+	clientlen = sizeof(clientaddr);
+	connfd = Accept(listenfd, (SA *)&clientaddr, &clientlen); //line:netp:tiny:accept
+    Getnameinfo((SA *) &clientaddr, clientlen, hostname, MAXLINE, port, MAXLINE, 0);
+    printf("Accepted connection from (%s, %s)\n", hostname, port);
+	
+    doit(connfd);                                             //line:netp:tiny:doit
+	
+    Close(connfd);                                            //line:netp:tiny:close
     }
 
+    
     printf("%s", user_agent_hdr);
     return 0;
 }
