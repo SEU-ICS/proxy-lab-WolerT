@@ -1,4 +1,6 @@
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <pthread.h>
 #include <semaphore.h>
 #include "csapp.h"
@@ -6,6 +8,7 @@
 /* Recommended max cache and object sizes */
 #define MAX_CACHE_SIZE 1049000
 #define MAX_OBJECT_SIZE 102400
+#define MAX_CACHE_ENTRIES 500  // 假设我们有500个缓存条目
 #define MAX_THREADS 100
 
 /* You won't lose style points for including this long line in your code */
@@ -13,115 +16,60 @@ static const char *user_agent_hdr = "User-Agent: Mozilla/5.0 (X11; Linux x86_64;
 
 sem_t mutex;
 
-typedef struct cache_block
-{
+typedef struct cache_entry {
     char uri[MAXLINE+5];
     char data[MAX_OBJECT_SIZE];
     int len;
-    struct cache_block *next;
-} cache_block;
+    int valid;  // 标记缓存条目是否有效
+} cache_entry;
 
-typedef struct list
-{
-    cache_block *head;
-    int n;
-    pthread_mutex_t lock;
-} list;
+cache_entry cache[MAX_CACHE_ENTRIES];  // 使用数组实现缓存
 
-list cache;
-
-void init()
-{
-    cache.head = NULL;
-    cache.n = 0;
-    pthread_mutex_init(&cache.lock, NULL);
-}
-
-cache_block *find(char *uri)
-{
-    pthread_mutex_lock(&cache.lock);
-    cache_block *p = cache.head;
-    while(p!=NULL)
-    {
-        if(strcmp(p->uri, uri)==0)
-        {
-            pthread_mutex_unlock(&cache.lock);
-            return p;
-        }
-        p = p->next;
+void init() {
+    for (int i = 0; i < MAX_CACHE_ENTRIES; i++) {
+        cache[i].valid = 0;  // 初始化所有缓存条目为无效
     }
-    pthread_mutex_unlock(&cache.lock);
-    return NULL;
-}
-
-void cache_insert(char *uri, char *data, int len)
-{
-    if(len>MAX_OBJECT_SIZE)
-        return;
-    pthread_mutex_lock(&cache.lock);
-
-    //LRU
-    while (cache.n + len > MAX_CACHE_SIZE) 
-    {
-        cache_block *block = cache.head;
-        cache.head = block->next;
-        cache.n -= block->len;
-        free(block);
-    }
-
-    cache_block *p=(cache_block *)malloc(sizeof(cache_block));
-    strcpy(p->uri, uri);    
-    memcpy(p->data, data, len);
-    p->len = len;
-    p->next = cache.head;
-    cache.head = p;
-    cache.n += len;
-
-    pthread_mutex_unlock(&cache.lock);
-
-    return;
-}
-
-void *thread(void *varg);
-void doit(int fd);
-int parse_uri(char *uri, char *hostname, char *port, char *filename);
-
-int main(int argc, char **argv)
-{
-    int listenfd, connfd;
-    char hostname[MAXLINE], port[MAXLINE];
-    socklen_t clientlen;
-    struct sockaddr_storage clientaddr;
-
-    /* Check command line args */
-    if (argc != 2)
-    {
-	    fprintf(stderr, "usage: %s <port>\n", argv[0]);
-	    exit(1);
-    }
-
-    listenfd = Open_listenfd(argv[1]);
-        
-    pthread_t tid;
-
-    init();
     sem_init(&mutex, 0, MAX_THREADS);
-
-    while (1) 
-    {
-	    clientlen = sizeof(clientaddr);
-	    connfd = Accept(listenfd, (SA *)&clientaddr, &clientlen); //line:netp:tiny:accept
-        Getnameinfo((SA *) &clientaddr, clientlen, hostname, MAXLINE, 
-                    port, MAXLINE, 0);
-        Pthread_create(&tid, NULL, thread, (void *)&connfd);
-
-        // printf("Accepted connection from (%s, %s)\n", hostname, port); 
-    }
-    return 0;
 }
 
-void *thread(void *varg)
-{
+int find(char *uri) {
+    for (int i = 0; i < MAX_CACHE_ENTRIES; i++) {
+        if (cache[i].valid && strcmp(cache[i].uri, uri) == 0) {
+            return i;  // 返回缓存条目的索引
+        }
+    }
+    return -1;  // 未找到
+}
+
+void cache_insert(char *uri, char *data, int len) {
+    if (len > MAX_OBJECT_SIZE) {
+        return;
+    }
+    sem_wait(&mutex);
+
+    // 查找第一个无效的缓存条目
+    int index = -1;
+    for (int i = 0; i < MAX_CACHE_ENTRIES; i++) {
+        if (!cache[i].valid) {
+            index = i;
+            break;
+        }
+    }
+
+    // 如果没有找到无效的条目，覆盖最老的条目（这里简单地选择第一个）
+    if (index == -1) {
+        index = 0;
+    }
+
+    strcpy(cache[index].uri, uri);
+    memcpy(cache[index].data, data, len);
+    cache[index].len = len;
+    cache[index].valid = 1;
+
+    sem_post(&mutex);
+}
+
+void *thread(void *varg) {
     int connfd = *( (int *) varg);
     Pthread_detach(pthread_self());
 
@@ -129,12 +77,11 @@ void *thread(void *varg)
     doit(connfd);
     sem_post(&mutex);
 
-	Close(connfd);  
-    return;
+    Close(connfd);
+    return NULL;
 }
 
-void doit(int fd)
-{
+void doit(int fd) {
     struct stat sbuf;
     char buf[MAXLINE], method[MAXLINE], uri[MAXLINE], version[MAXLINE];
     char hostname[MAXLINE], port[MAXLINE], filename[MAXLINE];
@@ -143,59 +90,51 @@ void doit(int fd)
 
     /* Read request line and headers */
     Rio_readinitb(&rio, fd);
-    if (!Rio_readlineb(&rio, buf, MAXLINE))  //line:netp:doit:readrequest
+    if (!Rio_readlineb(&rio, buf, MAXLINE)) {
         return;
+    }
     printf("%s", buf);
-    sscanf(buf, "%s %s %s", method, uri, version);       //line:netp:doit:parserequest
-    if (strcasecmp(method, "GET")) 
-    {                     //line:netp:doit:beginrequesterr
+    sscanf(buf, "%s %s %s", method, uri, version);
+    if (strcasecmp(method, "GET")) {
         printf("Proxy does not implement this method\r\n");
         return;
-    }                                                    //line:netp:doit:endrequesterr
-    //read_requesthdrs(&rio);                              //line:netp:doit:readrequesthdrs
+    }
 
     cache_block *block = find(uri);
-    if(block!=NULL)
-    {
+    if (block != NULL) {
         Rio_writen(fd, block->data, block->len);
         return;
     }
 
     /* Parse URI from GET request */
-    int ok = parse_uri(uri, hostname, port, filename);       //line:netp:doit:staticcheck
-    if(ok<0)
-    {
+    int ok = parse_uri(uri, hostname, port, filename);
+    if (ok < 0) {
         printf("Cannot parse uri.\n");
         return;
     }
-    
-    
+
     snprintf(server, sizeof(server), "%s %s %s\r\n", method, filename, version);
     snprintf(server + strlen(server), sizeof(server) - strlen(server), "Host: %s\r\n", hostname);
     snprintf(server + strlen(server), sizeof(server) - strlen(server), "Connection: close\r\n");
     snprintf(server + strlen(server), sizeof(server) - strlen(server), "User-Agent: Mozilla/5.0\r\n");
     snprintf(server + strlen(server), sizeof(server) - strlen(server), "\r\n");
 
-    int serverfd=open_clientfd(hostname, port);
-
-    if (serverfd < 0)
-    {
+    int serverfd = open_clientfd(hostname, port);
+    if (serverfd < 0) {
         printf("Cannot connect to server.\n");
         return;
     }
-    
+
     Rio_readinitb(&serrio, serverfd);
     Rio_writen(serverfd, server, strlen(server));
 
     size_t n;
-    size_t len=0;
+    size_t len = 0;
     char content[MAX_OBJECT_SIZE];
-    while ((n = Rio_readlineb(&serrio, buf, MAXLINE)) != 0)
-    {
-        printf("proxy received %d bytes,then send\n", (int)n);
+    while ((n = Rio_readlineb(&serrio, buf, MAXLINE)) != 0) {
+        printf("proxy received %d bytes, then send\n", (int)n);
         Rio_writen(fd, buf, n);
-        if(len + n < MAX_OBJECT_SIZE)
-        {
+        if (len + n < MAX_OBJECT_SIZE) {
             memcpy(content + len, buf, n);
             len += n;
         }
@@ -210,7 +149,7 @@ int parse_uri(char *uri, char *hostname, char *port, char *filename) {
     char *pathbegin;
     int len;
 
-    if (strncasecmp(uri, "http://", 7) == 0) 
+    if (strncasecmp(uri, "http://", 7) == 0)
         uri += 7;
     else
         return -1;
@@ -232,4 +171,34 @@ int parse_uri(char *uri, char *hostname, char *port, char *filename) {
     }
 
     pathbegin = strchr(hostend, '/');
-    
+    if (pathbegin)
+        strcpy(filename, pathbegin);
+    else
+        filename[0] = '\0';
+    return 0;
+}
+
+int main(int argc, char **argv) {
+    int listenfd, connfd;
+    char hostname[MAXLINE], port[MAXLINE];
+    socklen_t clientlen;
+    struct sockaddr_storage clientaddr;
+
+    if (argc != 2) {
+        fprintf(stderr, "usage: %s <port>\n", argv[0]);
+        exit(1);
+    }
+
+    listenfd = Open_listenfd(argv[1]);
+    pthread_t tid;
+
+    init();
+
+    while (1) {
+        clientlen = sizeof(clientaddr);
+        connfd = Accept(listenfd, (SA *)&clientaddr, &clientlen);
+        Getnameinfo((SA *)&clientaddr, clientlen, hostname, MAXLINE, port, MAXLINE, 0);
+        pthread_create(&tid, NULL, thread, (void *)&connfd);
+    }
+    return 0;
+}
