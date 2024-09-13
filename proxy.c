@@ -138,6 +138,60 @@ void *thread(void *varg)
     return NULL;
 }
 
+void doit(int fd)
+{
+    struct stat sbuf;
+    char buf[MAXLINE], method[MAXLINE], uri[MAXLINE], version[MAXLINE];
+    char hostname[MAXLINE], port[MAXLINE], filename[MAXLINE];
+    char server[MAXLINE*3];
+    rio_t rio, rio2;
+
+    Rio_readinitb(&rio, fd);
+    if (!Rio_readlineb(&rio, buf, MAXLINE))
+    {
+        return;
+    }
+    printf("%s", buf);
+    sscanf(buf, "%s %s %s", method, uri, version);
+    if (strcasecmp(method, "GET"))
+    {
+        printf("Proxy does not implement this method\r\n");
+        return;
+    }
+
+    cache_entry *block = &cache[find(uri)];
+    
+    if (block != NULL && block->valid)
+    {
+        Rio_writen(fd, block->data, block->len);
+        return;
+    }
+
+    parse_uri(uri, hostname, port, filename);
+    char buf2[MAXLINE*5];
+    size_t size = sprintf(buf2, "%s %s %s\r\nHost: %s\r\nConnection: close\r\nUser-Agent: %s\r\n\r\n", method, filename, version, hostname, user_agent_hdr);
+
+    int serverfd = open_clientfd(hostname, port);
+    Rio_readinitb(&rio2, serverfd);
+    Rio_writen(serverfd, buf2, strlen(buf2));
+
+    size_t n;
+    size_t len = 0;
+    char content[MAX_OBJECT_SIZE];
+    while ((n = Rio_readlineb(&rio2, buf, MAXLINE)) != 0)
+    {
+        printf("proxy received %d bytes, then send\n", (int)n);
+        Rio_writen(fd, buf, n);
+        if (len + n < MAX_OBJECT_SIZE)
+        {
+            memcpy(content + len, buf, n);
+            len += n;
+        }
+    }
+    Close(serverfd);
+    cache_insert(uri, content, len);
+}
+
 int main(int argc, char **argv)
 {
     pthread_t tid;
