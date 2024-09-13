@@ -100,8 +100,8 @@ void doit(int fd) {
         return;
     }
 
-    cache_block *block = find(uri);
-    if (block != NULL) {
+    cache_entry *block = &cache[find(uri)];
+    if (block != NULL && block->valid) {
         Rio_writen(fd, block->data, block->len);
         return;
     }
@@ -113,11 +113,8 @@ void doit(int fd) {
         return;
     }
 
-    snprintf(server, sizeof(server), "%s %s %s\r\n", method, filename, version);
-    snprintf(server + strlen(server), sizeof(server) - strlen(server), "Host: %s\r\n", hostname);
-    snprintf(server + strlen(server), sizeof(server) - strlen(server), "Connection: close\r\n");
-    snprintf(server + strlen(server), sizeof(server) - strlen(server), "User-Agent: Mozilla/5.0\r\n");
-    snprintf(server + strlen(server), sizeof(server) - strlen(server), "\r\n");
+    char buf2[MAXLINE*5];
+    size_t size = sprintf(buf2, "%s %s %s\r\nHost: %s\r\nConnection: close\r\nUser-Agent: %s\r\n\r\n", method, filename, version, hostname, user_agent_hdr);
 
     int serverfd = open_clientfd(hostname, port);
     if (serverfd < 0) {
@@ -126,7 +123,7 @@ void doit(int fd) {
     }
 
     Rio_readinitb(&serrio, serverfd);
-    Rio_writen(serverfd, server, strlen(server));
+    Rio_writen(serverfd, buf2, strlen(buf2));
 
     size_t n;
     size_t len = 0;
