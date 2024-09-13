@@ -5,60 +5,112 @@
 #include <semaphore.h>
 #include "csapp.h"
 
-/* Recommended max cache and object sizes */
 #define MAX_CACHE_SIZE 1049000
 #define MAX_OBJECT_SIZE 102400
-#define MAX_CACHE_ENTRIES 500  // 假设我们有500个缓存条目
+#define MAX_CACHE_ENTRIES 500
 #define MAX_THREADS 100
 #define WEB_PREFIX "http://"
 
-/* You won't lose style points for including this long line in your code */
 static const char *user_agent_hdr = "User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:10.0.3) Gecko/20120305 Firefox/10.0.3\r\n";
 
 sem_t mutex;
 
-typedef struct cache_entry {
+void parse_uri(char* uri, char* host, char* port, char* fileName)
+{
+    if (strncmp(uri, WEB_PREFIX, strlen(WEB_PREFIX)) != 0)
+    {
+        fprintf(stderr, "Error: Invalid URI format, must start with 'http://'\n");
+        return;
+    }
+
+    char* hostp = uri + strlen(WEB_PREFIX);
+
+    char* dash = strstr(hostp, "/");
+    if (!dash)
+    {
+        fprintf(stderr, "Error: Invalid URI format, missing path\n");
+        return;
+    }
+
+    char* colon = strstr(hostp, ":");
+    
+    if (colon)
+    {
+        int host_len = colon - hostp;
+        strncpy(host, hostp, host_len);
+        host[host_len] = '\0';
+
+        int port_len = dash - colon - 1;
+        strncpy(port, colon + 1, port_len);
+        port[port_len] = '\0';
+    }
+    else
+    {
+        int host_len = dash - hostp;
+        strncpy(host, hostp, host_len);
+        host[host_len] = '\0';
+        strcpy(port, "80");
+    }
+
+    strcpy(fileName, dash);
+
+    if (strlen(host) == 0 || strlen(port) == 0 || strlen(fileName) == 0)
+    {
+        fprintf(stderr, "Error: Failed to parse URI components. Host: %s, Port: %s, Filename: %s\n", host, port, fileName);
+    }
+}
+
+typedef struct cache_entry
+{
     char uri[MAXLINE+5];
     char data[MAX_OBJECT_SIZE];
     int len;
-    int valid;  // 标记缓存条目是否有效
+    int valid;
 } cache_entry;
 
-cache_entry cache[MAX_CACHE_ENTRIES];  // 使用数组实现缓存
+cache_entry cache[MAX_CACHE_ENTRIES];
 
-void init() {
-    for (int i = 0; i < MAX_CACHE_ENTRIES; i++) {
-        cache[i].valid = 0;  // 初始化所有缓存条目为无效
+void init()
+{
+    for (int i = 0; i < MAX_CACHE_ENTRIES; i++)
+    {
+        cache[i].valid = 0;
     }
     sem_init(&mutex, 0, MAX_THREADS);
 }
 
-int find(char *uri) {
-    for (int i = 0; i < MAX_CACHE_ENTRIES; i++) {
-        if (cache[i].valid && strcmp(cache[i].uri, uri) == 0) {
-            return i;  // 返回缓存条目的索引
+int find(char *uri)
+{
+    for (int i = 0; i < MAX_CACHE_ENTRIES; i++)
+    {
+        if (cache[i].valid && strcmp(cache[i].uri, uri) == 0)
+        {
+            return i;
         }
     }
-    return -1;  // 未找到
+    return -1;
 }
 
-void cache_insert(char *uri, char *data, int len) {
-    if (len > MAX_OBJECT_SIZE) {
+void cache_insert(char *uri, char *data, int len)
+{
+    if (len > MAX_OBJECT_SIZE)
+    {
         return;
     }
     sem_wait(&mutex);
 
-    // 查找第一个无效的缓存条目
     int index = -1;
-    for (int i = 0; i < MAX_CACHE_ENTRIES; i++) {
-        if (!cache[i].valid) {
+    for (int i = 0; i < MAX_CACHE_ENTRIES; i++)
+    {
+        if (!cache[i].valid)
+        {
             index = i;
             break;
         }
     }
 
-    // 如果没有找到无效的条目，覆盖最老的条目（这里简单地选择第一个）
-    if (index == -1) {
+    if (index == -1)
+    {
         index = 0;
     }
 
@@ -70,8 +122,9 @@ void cache_insert(char *uri, char *data, int len) {
     sem_post(&mutex);
 }
 
-void *thread(void *varg) {
-    int connfd = *( (int *) varg);
+void *thread(void *varg)
+{
+    int connfd = * ((int *) varg);
     Pthread_detach(pthread_self());
 
     sem_wait(&mutex);
@@ -82,48 +135,52 @@ void *thread(void *varg) {
     return NULL;
 }
 
-void doit(int fd) {
+void doit(int fd)
+{
     struct stat sbuf;
     char buf[MAXLINE], method[MAXLINE], uri[MAXLINE], version[MAXLINE];
     char hostname[MAXLINE], port[MAXLINE], filename[MAXLINE];
     char server[MAXLINE*3];
-    rio_t rio, serrio;
+    rio_t rio, rio2;
 
-    /* Read request line and headers */
     Rio_readinitb(&rio, fd);
-    if (!Rio_readlineb(&rio, buf, MAXLINE)) {
+    if (!Rio_readlineb(&rio, buf, MAXLINE))
+    {
         return;
     }
     printf("%s", buf);
     sscanf(buf, "%s %s %s", method, uri, version);
-    if (strcasecmp(method, "GET")) {
+    if (strcasecmp(method, "GET"))
+    {
         printf("Proxy does not implement this method\r\n");
         return;
     }
 
     cache_entry *block = &cache[find(uri)];
     
-    if (block != NULL && block->valid) {
+    if (block != NULL && block->valid)
+    {
         Rio_writen(fd, block->data, block->len);
         return;
     }
 
-    /* Parse URI from GET request */
     parse_uri(uri, hostname, port, filename);
     char buf2[MAXLINE*5];
     size_t size = sprintf(buf2, "%s %s %s\r\nHost: %s\r\nConnection: close\r\nUser-Agent: %s\r\n\r\n", method, filename, version, hostname, user_agent_hdr);
 
     int serverfd = open_clientfd(hostname, port);
-    Rio_readinitb(&serrio, serverfd);
+    Rio_readinitb(&rio2, serverfd);
     Rio_writen(serverfd, buf2, strlen(buf2));
 
     size_t n;
     size_t len = 0;
     char content[MAX_OBJECT_SIZE];
-    while ((n = Rio_readlineb(&serrio, buf, MAXLINE)) != 0) {
+    while ((n = Rio_readlineb(&rio2, buf, MAXLINE)) != 0)
+    {
         printf("proxy received %d bytes, then send\n", (int)n);
         Rio_writen(fd, buf, n);
-        if (len + n < MAX_OBJECT_SIZE) {
+        if (len + n < MAX_OBJECT_SIZE)
+        {
             memcpy(content + len, buf, n);
             len += n;
         }
@@ -132,62 +189,15 @@ void doit(int fd) {
     cache_insert(uri, content, len);
 }
 
-void parse_uri(char* uri, char* host, char* port, char* fileName) {
-    // Check if the URI starts with "http://"
-    if (strncmp(uri, WEB_PREFIX, strlen(WEB_PREFIX)) != 0) {
-        fprintf(stderr, "Error: Invalid URI format, must start with 'http://'\n");
-        return;
-    }
-
-    // Move past "http://"
-    char* hostp = uri + strlen(WEB_PREFIX);
-
-    // Locate the first '/' after the host (indicating the start of the path)
-    char* dash = strstr(hostp, "/");
-    if (!dash) {
-        fprintf(stderr, "Error: Invalid URI format, missing path\n");
-        return;
-    }
-
-    // Locate the ':' which separates host and port (if present)
-    char* colon = strstr(hostp, ":");
-    
-    // Check for host and port parsing
-    if (colon && colon < dash) {
-        // Hostname is up to the colon
-        int host_len = colon - hostp;
-        strncpy(host, hostp, host_len);
-        host[host_len] = '\0';
-
-        // Port is between the colon and the first '/'
-        int port_len = dash - colon - 1;
-        strncpy(port, colon + 1, port_len);
-        port[port_len] = '\0';
-    } else {
-        // No port specified, default to "80"
-        int host_len = dash - hostp;
-        strncpy(host, hostp, host_len);
-        host[host_len] = '\0';
-        strcpy(port, "80");
-    }
-
-    // Copy the path (filename) from the URI
-    strcpy(fileName, dash);
-
-    // Validate if host, port, and filename are properly set
-    if (strlen(host) == 0 || strlen(port) == 0 || strlen(fileName) == 0) {
-        fprintf(stderr, "Error: Failed to parse URI components. Host: %s, Port: %s, Filename: %s\n", host, port, fileName);
-    }
-}
-
-
-int main(int argc, char **argv) {
+int main(int argc, char **argv)
+{
     int listenfd, connfd;
     char hostname[MAXLINE], port[MAXLINE];
     socklen_t clientlen;
     struct sockaddr_storage clientaddr;
 
-    if (argc != 2) {
+    if (argc != 2)
+    {
         fprintf(stderr, "usage: %s <port>\n", argv[0]);
         exit(1);
     }
@@ -197,7 +207,8 @@ int main(int argc, char **argv) {
 
     init();
 
-    while (1) {
+    while (1)
+    {
         clientlen = sizeof(clientaddr);
         connfd = Accept(listenfd, (SA *)&clientaddr, &clientlen);
         Getnameinfo((SA *)&clientaddr, clientlen, hostname, MAXLINE, port, MAXLINE, 0);
