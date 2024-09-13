@@ -86,15 +86,15 @@ void parse_uri(char* uri, char* host, char* port, char* fileName)
     if(!colon)
     {
         strncpy(host, hostp, dash - hostp);
-        host[dash - hostp] = '\0'
-        strcpy(port,'80');
+        host[dash - hostp] = '\0';
+        strcpy(port,"80");
     }
     else
     {
         strncpy(host, hostp, colon - hostp);
         host[colon - host] = '\0';
         strncpy(port, colon + 1, dash - colon -1);
-        port[dash - colon -1] = '\0'
+        port[dash - colon -1] = '\0';
     }
 
     strcpy(fileName, dash);
