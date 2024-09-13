@@ -130,7 +130,7 @@ void doit(int fd)
     Rio_readinitb(&rio2, clientfd);
     char buf2[MAXLINE*5];
     size_t size = sprintf(buf2,"%s %s %s\r\nHost: %s\r\nConnection: close\r\nUser-Agent: Mozilla/5.0\r\n\r\n", method, filename, version,host);
-    Rio_writen(clientfd, buf, size);
+    Rio_writen(clientfd, buf2, size);
 
     size_t n;
     size_t len=0;
