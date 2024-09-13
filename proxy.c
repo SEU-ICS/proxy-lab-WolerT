@@ -92,7 +92,6 @@ void *thread(void *varg)
 
 void parse_uri(char* uri, char* host, char* port, char* fileName)
 {
-    sscanf(buf, "%s %s %s", method, uri, version);
     char* hostp = strstr(uri, WEB_PREFIX) + strlen(WEB_PREFIX);
     char* dash = strstr(hostp, "/");
     char* colon = strstr(hostp, ":");
