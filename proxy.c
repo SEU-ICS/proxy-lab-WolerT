@@ -13,66 +13,47 @@
 /* You won't lose style points for including this long line in your code */
 static const char *user_agent_hdr = "User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:10.0.3) Gecko/20120305 Firefox/10.0.3\r\n";
 
-int parse_uri(char *uri, char *filename, /*char *cgiargs, */char *host, char*port) 
-{
-
+int parse_uri(char *uri, char *filename, char *host, char *port) {
     char *uri_copy = strdup(uri);
     char *dash = strstr(uri_copy, "://");
     char *host_start = NULL;
     char *host_end = NULL;
     char *port_start = NULL;
 
-    //read host
-    if (dash) 
-        host_start = dash + 3; 
-    else 
-    {
+    if (dash) {
+        host_start = dash + 3;
+    } else {
         host_start = uri_copy;
         return -1;
-    } 
+    }
 
     host_end = strchr(host_start, '/');
-    
-    if (host_end) 
-    {
+    if (host_end) {
         *host_end = '\0';
-        host = strdup(host_start);
+        strcpy(host, host_start);
+    } else {
+        strcpy(host, host_start);
     }
 
-    //read port
     port_start = strchr(host_start, ':');
-    
-    if (port_start && (port_start[1] != '\0')) 
-    {
+    if (port_start && (port_start[1] != '\0')) {
         *port_start = '\0';
         port_start++;
-        *port = atoi(port_start);
-    } 
-    else {
-        *port = 80;
+        sprintf(port, "%d", atoi(port_start));
+    } else {
+        strcpy(port, "80");
     }
 
-    //read filename
     if (host_end) {
-        filename = strdup(host_end);
+        strcpy(filename, host_end);
+    } else {
+        strcpy(filename, "/");
     }
 
     free(uri_copy);
     return 1;
-    /*else 
-    {  // Dynamic content                         //line:netp:parseuri:isdynamic
-	ptr = index(uri, '?');                           //line:netp:parseuri:beginextract
-	if (ptr) {
-	    strcpy(cgiargs, ptr+1);
-	    *ptr = '\0';
-	}
-	else 
-	    strcpy(cgiargs, "");                         //line:netp:parseuri:endextract
-	strcpy(filename, ".");                           //line:netp:parseuri:beginconvert2
-	strcat(filename, uri);                           //line:netp:parseuri:endconvert2
-	return 0;
-    }*/
 }
+
 
 void doit(int fd) 
 {
