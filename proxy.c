@@ -5,14 +5,12 @@
 #include <semaphore.h>
 #include "csapp.h"
 
-/* Recommended max cache and object sizes */
 #define MAX_CACHE_SIZE 1049000
 #define MAX_OBJECT_SIZE 102400
-#define MAX_CACHE_ENTRIES 500  // 假设我们有500个缓存条目
+#define MAX_CACHE_ENTRIES 500
 #define MAX_THREADS 100
 #define WEB_PREFIX "http://"
 
-/* You won't lose style points for including this long line in your code */
 static const char *user_agent_hdr = "User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:10.0.3) Gecko/20120305 Firefox/10.0.3\r\n";
 
 sem_t mutex;
@@ -21,14 +19,14 @@ typedef struct cache_entry {
     char uri[MAXLINE+5];
     char data[MAX_OBJECT_SIZE];
     int len;
-    int valid;  // 标记缓存条目是否有效
+    int valid;
 } cache_entry;
 
-cache_entry cache[MAX_CACHE_ENTRIES];  // 使用数组实现缓存
+cache_entry cache[MAX_CACHE_ENTRIES];
 
 void init() {
     for (int i = 0; i < MAX_CACHE_ENTRIES; i++) {
-        cache[i].valid = 0;  // 初始化所有缓存条目为无效
+        cache[i].valid = 0;
     }
     sem_init(&mutex, 0, MAX_THREADS);
 }
@@ -36,10 +34,10 @@ void init() {
 int find(char *uri) {
     for (int i = 0; i < MAX_CACHE_ENTRIES; i++) {
         if (cache[i].valid && strcmp(cache[i].uri, uri) == 0) {
-            return i;  // 返回缓存条目的索引
+            return i;
         }
     }
-    return -1;  // 未找到
+    return -1;
 }
 
 void cache_insert(char *uri, char *data, int len) {
@@ -48,7 +46,6 @@ void cache_insert(char *uri, char *data, int len) {
     }
     sem_wait(&mutex);
 
-    // 查找第一个无效的缓存条目
     int index = -1;
     for (int i = 0; i < MAX_CACHE_ENTRIES; i++) {
         if (!cache[i].valid) {
@@ -57,7 +54,6 @@ void cache_insert(char *uri, char *data, int len) {
         }
     }
 
-    // 如果没有找到无效的条目，覆盖最老的条目（这里简单地选择第一个）
     if (index == -1) {
         index = 0;
     }
@@ -100,7 +96,6 @@ void doit(int fd) {
     char server[MAXLINE*3];
     rio_t rio, serrio;
 
-    /* Read request line and headers */
     Rio_readinitb(&rio, fd);
     if (!Rio_readlineb(&rio, buf, MAXLINE)) {
         return;
@@ -119,7 +114,6 @@ void doit(int fd) {
         return;
     }
 
-    /* Parse URI from GET request */
     parse_uri(uri, hostname, port, filename);
     char buf2[MAXLINE*5];
     size_t size = sprintf(buf2, "%s %s %s\r\nHost: %s\r\nConnection: close\r\nUser-Agent: %s\r\n\r\n", method, filename, version, hostname, user_agent_hdr);
