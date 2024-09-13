@@ -132,36 +132,26 @@ void doit(int fd) {
     cache_insert(uri, content, len);
 }
 
-int parse_uri(char *uri, char *hostname, char *port, char *filename) {
-    char *hostbegin;
-    char *hostend;
-    char *pathbegin;
-    int len;
-
-    if (strncasecmp(uri, "http://", 7) == 0)
-        uri += 7;
-    else
-        return -1;
-    hostbegin = uri;
-    hostend = strpbrk(hostbegin, " :/\r\n\0");
-    len = hostend - hostbegin;
-    strncpy(hostname, hostbegin, len);
-    hostname[len] = '\0';
-    if (*hostend == ':') {
-        char *portbegin = hostend + 1;
-        char *portend = strpbrk(portbegin, "/\r\n\0");
-        len = portend - portbegin;
-        strncpy(port, portbegin, len);
-        port[len] = '\0';
-    } else {
-        strcpy(port, "80");
+void parse_uri(char* uri, char* host, char* port, char* fileName)
+{
+    char* hostp = strstr(uri, WEB_PREFIX) + strlen(WEB_PREFIX);
+    char* dash = strstr(hostp, "/");
+    char* colon = strstr(hostp, ":");
+    if(!colon)
+    {
+        strncpy(host, hostp, dash - hostp);
+        host[dash - hostp] = '\0';
+        strcpy(port,"80");
     }
-    pathbegin = strchr(hostend, '/');
-    if (pathbegin)
-        strcpy(filename, pathbegin);
     else
-        filename[0] = '\0';
-    return 0;
+    {
+        strncpy(host, hostp, colon - hostp);
+        host[colon - host] = '\0';
+        strncpy(port, colon + 1, dash - colon -1);
+        port[dash - colon -1] = '\0';
+    }
+
+    strcpy(fileName, dash);
 }
 
 int main(int argc, char **argv) {
