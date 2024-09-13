@@ -38,15 +38,15 @@ int parse_uri(char *uri, char *filename, char *host, char *port)
     char *port_start = strchr(host_start, ':');
     if (port_start && (port_start[1] != '\0')) {
         *port_start = '\0';
-        strcpy(port, port_start);
+        strcpy(port, port_start + 1);
     } else {
         strcpy(port, "80");
     }
 
     if (host_end) {
-        strcpy(filename, host_end + 1);
+        strcpy(filename, host_end);
     } else {
-        strcpy(filename, "/");
+        strcpy(filename, "\0");
     }
 
     free(uri_copy);
