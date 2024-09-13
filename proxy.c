@@ -203,6 +203,14 @@ void doit(int fd) {
     Close(clientfd);
 }
 
+void *thread(void *vargp) {
+    pthread_detach(pthread_self());
+    while (1) {
+        int connfd = sbuf_remove(&sbuf);
+        doit(connfd);
+        Close(connfd);
+    }
+}
 
 int main(int argc, char **argv) {
     int listenfd, connfd;
@@ -234,6 +242,5 @@ int main(int argc, char **argv) {
     }
 
     sbuf_deinit(&sbuf);
-    printf("%s", user_agent_hdr);
     return 0;
 }
